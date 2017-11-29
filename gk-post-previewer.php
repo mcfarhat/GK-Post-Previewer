@@ -3,7 +3,7 @@
   Plugin Name: GK Post Previewer
   Plugin URI: http://www.greateck.com/
   Description: A plugin used to generate post previews as custom types out of social media links
-  Version: 0.1.0
+  Version: 0.2.0
   Author: mcfarhat
   Author URI: http://www.greateck.com
   License: GPLv2
@@ -61,19 +61,149 @@ function create_post_preview_type() {
 		'capability_type'       => 'post',
 	);
 	register_post_type( 'post_preview', $args );
+	//register_taxonomy_for_object_type( 'photographers', 'post_preview' );
+	//register_taxonomy('photographers','post_preview');
 }
 add_action( 'init', 'create_post_preview_type', 0 );
 
 }
 
-function gk_post_previewer_enqueue($hook) {
+/* limit count to 10 on front end disply only */
+function post_return_count_limit( $limit, $query ) {
+	if ( ! is_admin() && $query->is_main_query() && $query->is_search() ) {
+		return 'LIMIT 0, '.$query->query_vars['posts_per_page'];
+	}
+	return $limit;
+}
+
+function my_enqueue($hook) {
     if ( 'post-new.php' != $hook ) {
         return;
     }
 	wp_enqueue_media();
+    //wp_enqueue_script( 'my_custom_script', plugin_dir_url( __FILE__ ) . 'myscript.js' );
 }
 
-add_action( 'admin_enqueue_scripts', 'gk_post_previewer_enqueue' );
+add_action( 'admin_enqueue_scripts', 'my_enqueue' );
+
+/* enable shortcodes in widgets */
+
+//if (!is_admin()){
+add_filter('widget_text', 'do_shortcode', 11);
+
+
+/* shortcode to display post previews [post_preview_posts_sc limit=10] on front end */
+
+add_shortcode('post_preview_posts_sc', 'post_preview_shortcode' );
+
+function post_preview_shortcode( $atts, $content = "" ) {
+	$inner_atts = shortcode_atts( array(
+        'limit' => 10,
+    ), $atts );
+	
+	$args = array( 'post_type' => 'post_preview', 'posts_per_page' => $inner_atts['limit']);
+	
+	//if this is a category page, filter by category
+	if (is_category()){
+		//echo '>>>>CAT';
+		$category = get_category( get_query_var( 'cat' ) );
+		$cat_id = $category->cat_ID;
+		$args['cat'] = $cat_id;
+		//echo $cat_id;
+	}
+	//echo "<script>alert('".$inner_atts['limit']."');</script>";
+	add_filter( 'post_limits', 'post_return_count_limit', 10, 2 );
+	$loop = new WP_Query( $args );
+	remove_filter( 'post_limits', 'post_return_count_limit', 10, 2 );
+	//checking to see if the text formatting plugin for headlines exists, and is active
+	include_once( ABSPATH . 'wp-admin/includes/plugin.php' ); 
+	
+	$content .= '<div id="main_post_preview_div" >';
+	//tracking post counter
+	$looper = 1;
+	//ad counter
+	$ad_id = 1;
+	while ( $loop->have_posts() ) : $loop->the_post();
+		//set default as outside link
+		$url = get_post_meta( get_the_ID(), 'post_preview_url', true);
+		$is_vid = false;
+		if ((stripos($url, 'youtube')!==false) || 
+			(stripos($url, 'vimeo')!==false) || 
+			(stripos($url, 'instagram')!==false && stripos($url, 'mp4')!==false) || 
+			(stripos($url, 'facebook')!==false && stripos($url, 'video')!==false)){
+			//in case not a video, post normally
+			//changing approach to link to the post url instead of the actual url
+			$url = get_permalink();//get_post_meta( get_the_ID(), 'post_preview_url', true);
+			$is_vid = true;
+		}
+		
+		$content .= '<div class="post_preview_thumb_image">'; 
+		//$content .=  get_the_post_thumbnail(get_the_ID());
+		
+		$content .=  '<a href="' . $url . '" '. (!$is_vid?'target="_blank"':'') .' >';//target="_blank" 
+		
+		//get proper image dimension for speed
+		// global $wpdb;
+		//echo $front_img.">";
+		$img_size_to_render = 'small';
+		//URL
+		$front_img = get_post_meta( get_the_ID(), 'post_preview_image', true);
+		
+		
+		//$attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid='%s';", $front_img )); 
+		if (isset($img_opt_src) && sizeof($img_opt_src)>0) {
+			//$image = $attachment[0]; 
+			//echo $image.">";
+				//print_r($image);
+			//$image_data = wp_get_attachment_image_src($image, 'full');
+			//get the ID
+			//$img_opt_src = wp_get_attachment_image_src($image, $img_size_to_render);
+			//if( isset($img_opt_src) && sizeof($img_opt_src)>0 ) {
+				$content .= '<img src="'.$img_opt_src['url'].'" class="link_pre_img stdrd_frame"';
+				$content .= '>';
+			//}
+		}
+		//$content .=  '<img src="'.get_post_meta( get_the_ID(), 'post_preview_image', true).'" >';
+		$content .=  '</a>';
+		$content .=  '</div>';
+		
+		$content .=  '<span class="post_preview_thumb_title slabtext">';
+		$content .=  '<a href="' . $url . '" '. (!$is_vid?'target="_blank"':'') .' >';//target="_blank"
+		
+		//$content .=  '<h3>';
+		
+		
+		$content .= get_the_title();
+		
+		//$content .=  '</h3>';
+		
+		$content .=  '</a>';
+		$content .=  '</span>';
+		
+
+		$content .=  '<div class="post_preview_thumb_subtitle">';//'<div class="entry-content">';
+
+		$content .=  get_post_meta( get_the_ID(), 'post_preview_sub_title', true);
+
+				
+		//$url = get_post_meta( get_the_ID(), 'post_preview_url', true);
+		
+		//$content .=  '<a href="' . $url . '">' . $url. '</a>';
+		
+		$content .=  '</div><br />';
+
+		//end of instagram options section
+		
+		if ($looper % 3 == 0){
+			$content .= do_shortcode('[td_block_ad_box spot_id="custom_ad_post_previews_'.$ad_id.'"]');
+			$ad_id++;
+		}
+		$looper++;
+	endwhile;
+	$content .= '</div><!-- end main_post_preview_div -->';
+	wp_reset_query();	
+	echo do_shortcode ($content);
+}
 
 
 class Preview_Type_Meta_Box {
@@ -137,7 +267,7 @@ class Preview_Type_Meta_Box {
 		echo '		<th style="width: 20%;"><label for="post_preview_url" class="post_preview_url_label">' . __( 'URL', 'post_preview' ) . '</label></th>';
 		echo '		<td style="width:50%;">';
 		echo '			<input type="text" id="post_preview_url" name="post_preview_url" class="post_preview_field" placeholder="' . esc_attr__( '', 'post_preview' ) . '" value="' . esc_attr__( $post_preview_url ) . '">';
-		echo '			<p class="description">' . __( 'URL address of the link to preview', 'post_preview' ) . '</p>';
+		echo '			<p class="description">' . __( 'URL address of the post to preview', 'post_preview' ) . '</p>';
 		echo ' 			<input type="button" value="Load" id="load_url_btn" src="'.plugins_url('/post-preview-post-type/img/ajax-loader.gif').'" >';		
 		echo '		</td>';
 		echo '		<td>';
@@ -193,7 +323,16 @@ class Preview_Type_Meta_Box {
 		echo '	</tr>';		
 
 		echo '</table></td>';
-
+		/*
+		echo '<td style="width: 30%;">';
+		echo '<table class="form-table">';
+		echo '	<tr>';
+		//echo '		<th><label for="insta_embedder" class="post_preview_url_label">' . __( 'Instagram Embedder', 'post_preview' ) . '</label></th>';		
+		echo '		<td><iframe src="http://ctrlq.org/instagram/" style="width:350px; height:500px;"> </iframe></td>';		
+		echo '	</tr>';
+		echo '</table>';
+		echo '</td>';
+		*/
 		echo '</tr></table>';
 		echo '<div id="ajax_returned_content" style="display:none"></div>';
 	}
@@ -249,7 +388,7 @@ new Preview_Type_Meta_Box;
 /* updating view all post previews */
 
 // Change the columns for the edit CPT screen
-function gk_post_preview_change_columns( $cols ) {
+function post_preview_change_columns( $cols ) {
   $cols = array(
     'cb'       => '<input type="checkbox" />',
     'title'      => __( 'Title',      'post_preview' ),
@@ -260,9 +399,9 @@ function gk_post_preview_change_columns( $cols ) {
   );
   return $cols;
 }
-add_filter( "manage_post_preview_posts_columns", "gk_post_preview_change_columns" );
+add_filter( "manage_post_preview_posts_columns", "post_preview_change_columns" );
 
-function gk_post_preview_custom_columns( $column, $post_id ) {
+function post_preview_custom_columns( $column, $post_id ) {
   switch ( $column ) {
 	case "title":
       //$url = get_post_meta( $post_id, 'url', true);
@@ -288,17 +427,18 @@ function gk_post_preview_custom_columns( $column, $post_id ) {
       break;
   }
 }
-add_action( "manage_post_preview_posts_custom_column", "gk_post_preview_custom_columns", 10, 2 );
+add_action( "manage_post_preview_posts_custom_column", "post_preview_custom_columns", 10, 2 );
 
 // Make these columns sortable
-function gk_post_preview_sortable_columns() {
+function post_preview_sortable_columns() {
   return array(
     'title'	   => 'title',
 	'url'      => 'url',
     'subtitle' => 'subtitle',
+    //'host'     => 'host'
   );
 }
-add_filter( "manage_edit-post_preview_sortable_columns", "gk_post_preview_sortable_columns" );
+add_filter( "manage_edit-post_preview_sortable_columns", "post_preview_sortable_columns" );
 
 /* section for handling instagram embed */
 function clean_input($data){
@@ -397,29 +537,16 @@ function capture_url() {
 			}
 			//case of facebook, or other older versions:
 			if (empty($image_url)){
+
 				
-				
+				//print_r($document);//->getElementsByTagName('img'));
+				//print_r($document->getElementsByTagName('*'));
 				foreach($document->getElementsByTagName('img') as $img_entry) {
 					//echo $img_entry->getAttribute('class');
 					//if (stripos($img_entry->getAttribute('class'), 'scaledImageFitWidth') !== false) {
 					//if ($img_entry->getAttribute('class') == 'scaledImageFitWidth'){ 
 						$image_url = $img_entry->getAttribute('src');
 						$content_title = $img_entry->getAttribute('alt');
-						
-						//in the particular case of the site fnf.as, we need to fetch specific image into the content, that has a path starting with /ViewImage.aspx
-						if (strpos($url,'www.fnf.as')>0){
-							if (strpos($image_url,'ViewImage.aspx')===FALSE){
-								continue;
-							}else{
-								//set title as page title
-								$page_header_elems = $document->getElementsByTagName('h1');
-								foreach ($page_header_elems as $page_header_elem) {
-									$content_title = $page_header_elem->nodeValue;
-									//we only need first one, break
-									break;
-								}
-							}
-						}
 						
 						//in case this image url is a sub-url, meaning it doesnt capture the full domain, append the base domain to it
 						if (strpos($image_url,'/')==0){
@@ -445,7 +572,6 @@ function capture_url() {
 
 		}
 		
-
 	}
 	$returned_vals = array('img'=> $image_url,
 							'title'=> $content_title);
@@ -460,6 +586,73 @@ function capture_url() {
 // capturing the URL via Ajax
 add_action( 'wp_ajax_fetch_url_prev', 'capture_url' );
 add_action( 'wp_ajax_parse_insta_video', 'parse_insta_video' );
+
+
+
+// Creating the widget
+class wpb_widget extends WP_Widget {
+	function __construct() {
+		parent::__construct(
+		// Base ID of your widget
+		'post_preview_widget',
+		// Widget name will appear in UI
+		__('Post Previews Widget', 'post_preview'),
+		// Widget description
+		array( 'description' => __( 'Widget Allowing Display of Post Previews', 'post_preview' ), )
+		);
+	}
+	// Creating widget front-end
+	// This is where the action happens
+	public function widget( $args, $instance ) {
+		$title = apply_filters( 'widget_title', $instance['title'] );
+		$link_count = apply_filters( 'widget_link_count', $instance['link_count'] );
+		// before and after widget arguments are defined by themes
+		echo $args['before_widget'];
+		if ( ! empty( $title ) )
+			echo $args['before_title'] . $title . $args['after_title'];
+		// This is where you run the code and display the output
+		//echo "<script>alert('".$link_count."');</script>";
+		echo do_shortcode('[post_preview_posts_sc limit='.$link_count.']');
+		echo $args['after_widget'];
+	}
+	// Widget Backend
+	public function form( $instance ) {
+		if ( isset( $instance[ 'title' ] ) ) {
+			$title = $instance[ 'title' ];
+		}
+		else {
+			$title = __( 'Post Previews', 'post_preview' );
+		}
+		if ( isset( $instance[ 'link_count' ] ) ) {
+			$link_count = $instance[ 'link_count' ];
+		}
+		else {
+			//default value
+			$link_count = 10;
+		}
+		// Widget admin form
+		?>
+		<p>
+		<label for="<?php echo $this->get_field_id( 'title' ); ?>"><?php _e( 'Title:' ); ?></label>
+		<input class="widefat" id="<?php echo $this->get_field_id( 'title' ); ?>" name="<?php echo $this->get_field_name( 'title' ); ?>" type="text" value="<?php echo esc_attr( $title ); ?>" />
+		</p>
+		<p><label for="<?php echo $this->get_field_id( 'link_count' ); ?>">Number of Post Previews to show:</label>
+		<input class="tiny-text" id="<?php echo $this->get_field_id( 'link_count' ); ?>" name="<?php echo $this->get_field_name( 'link_count' ); ?>" type="number" step="1" min="1" value="<?php echo esc_attr( $link_count ); ?>" size="3"></p>
+		<?php
+	}
+	// Updating widget replacing old instances with new
+	public function update( $new_instance, $old_instance ) {
+		$instance = array();
+		$instance['title'] = ( ! empty( $new_instance['title'] ) ) ? strip_tags( $new_instance['title'] ) : '';
+		$instance['link_count'] = ( ! empty( $new_instance['link_count'] ) ) ? $new_instance['link_count'] : '10';
+		return $instance;
+	}
+} // Class wpb_widget ends here
+// Register and load the widget
+function wpb_load_widget() {
+    register_widget( 'wpb_widget' );
+}
+add_action( 'widgets_init', 'wpb_load_widget' );
 
 
 add_action( 'admin_footer', 'fetch_url_prev_javascript' );
