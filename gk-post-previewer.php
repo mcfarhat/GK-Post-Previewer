@@ -3,7 +3,7 @@
   Plugin Name: GK Post Previewer
   Plugin URI: http://www.greateck.com/
   Description: A plugin used to generate post previews as custom types out of social media links
-  Version: 0.2.0
+  Version: 0.3.0
   Author: mcfarhat
   Author URI: http://www.greateck.com
   License: GPLv2
@@ -120,9 +120,6 @@ function post_preview_shortcode( $atts, $content = "" ) {
 	
 	$content .= '<div id="main_post_preview_div" >';
 	//tracking post counter
-	$looper = 1;
-	//ad counter
-	$ad_id = 1;
 	while ( $loop->have_posts() ) : $loop->the_post();
 		//set default as outside link
 		$url = get_post_meta( get_the_ID(), 'post_preview_url', true);
@@ -142,26 +139,13 @@ function post_preview_shortcode( $atts, $content = "" ) {
 		
 		$content .=  '<a href="' . $url . '" '. (!$is_vid?'target="_blank"':'') .' >';//target="_blank" 
 		
-		//get proper image dimension for speed
-		// global $wpdb;
-		//echo $front_img.">";
 		$img_size_to_render = 'small';
 		//URL
 		$front_img = get_post_meta( get_the_ID(), 'post_preview_image', true);
 		
-		
-		//$attachment = $wpdb->get_col($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid='%s';", $front_img )); 
 		if (isset($img_opt_src) && sizeof($img_opt_src)>0) {
-			//$image = $attachment[0]; 
-			//echo $image.">";
-				//print_r($image);
-			//$image_data = wp_get_attachment_image_src($image, 'full');
-			//get the ID
-			//$img_opt_src = wp_get_attachment_image_src($image, $img_size_to_render);
-			//if( isset($img_opt_src) && sizeof($img_opt_src)>0 ) {
-				$content .= '<img src="'.$img_opt_src['url'].'" class="link_pre_img stdrd_frame"';
-				$content .= '>';
-			//}
+			$content .= '<img src="'.$img_opt_src['url'].'" class="link_pre_img stdrd_frame"';
+			$content .= '>';
 		}
 		//$content .=  '<img src="'.get_post_meta( get_the_ID(), 'post_preview_image', true).'" >';
 		$content .=  '</a>';
@@ -193,12 +177,6 @@ function post_preview_shortcode( $atts, $content = "" ) {
 		$content .=  '</div><br />';
 
 		//end of instagram options section
-		
-		if ($looper % 3 == 0){
-			$content .= do_shortcode('[td_block_ad_box spot_id="custom_ad_post_previews_'.$ad_id.'"]');
-			$ad_id++;
-		}
-		$looper++;
 	endwhile;
 	$content .= '</div><!-- end main_post_preview_div -->';
 	wp_reset_query();	
@@ -706,8 +684,24 @@ function fetch_url_prev_javascript() { ?>
 						// $( "#ajax_returned_content" ).empty().append( data );
 						// $( "[name=post_title]").val(returned_content_array['title']);
 						
-						//modifying video URL correctly according to returned val
-						$('#post_preview_url').val(info_container.video_url);
+						
+						//checking if video url is available. If not, grab it from the edge_sidecar_to_children
+						//this is confirmed via checking the value of the is_video attribute
+						//by default, grab the value of the video_url attribute.
+						var vid_url = info_container.video_url;
+						if (!info_container.is_video){
+							var child_edges = info_container.edge_sidecar_to_children.edges;
+							$.each(child_edges, function(index,edge_entry){
+								//check if this node is a video, if so we found our needed vid
+								if (edge_entry.node.is_video){
+									vid_url = edge_entry.node.video_url;
+									//break from the loop
+									return false;
+								}
+							});
+						}
+						//setting video URL properly
+						$('#post_preview_url').val(vid_url);
 						
 						//modifying image URL according to returned val
 						$( "#post_preview_image").val(info_container.display_url);
